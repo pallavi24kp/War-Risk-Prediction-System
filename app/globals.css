@@ -1,0 +1,2 @@
+/* This file intentionally re-exports from the canonical globals location */
+@import '../src/app/globals.css';

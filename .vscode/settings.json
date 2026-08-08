@@ -1,0 +1,29 @@
+{
+  // Disable the built-in CSS validator so it doesn't flag Tailwind's
+  // custom at-rules (@tailwind, @apply, @layer, @screen, @config).
+  // The Tailwind CSS IntelliSense extension handles these instead.
+  "css.validate": false,
+  "scss.validate": false,
+  "less.validate": false,
+
+  // Point the Tailwind CSS IntelliSense extension to the config file
+  "tailwindCSS.experimental.configFile": "./tailwind.config.js",
+
+  // Ensure Tailwind directives are recognised in CSS files
+  "tailwindCSS.includeLanguages": {
+    "typescript": "javascript",
+    "typescriptreact": "javascript"
+  },
+
+  // Show Tailwind IntelliSense suggestions inline
+  "editor.quickSuggestions": {
+    "strings": true
+  },
+
+  // Extension recommendations for any team member opening this project
+  "extensions.recommendations": [
+    "bradlc.vscode-tailwindcss",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint"
+  ]
+}

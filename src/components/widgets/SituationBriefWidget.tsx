@@ -3,13 +3,35 @@ import { WidgetChrome } from '../common/WidgetChrome';
 import { FileText, Sparkles, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDashboardState } from '../../store/useDashboardState';
+import { useSynthesisQuery } from '../../lib/useApiQueries';
 
 export const SituationBriefWidget: React.FC = () => {
-  const { isLiveMode, isLoadingIntelligence, intelligenceData } = useDashboardState();
+  const { isLiveMode, isLoadingIntelligence, intelligenceData, selectedRegion } = useDashboardState();
   const [selectedCitation, setSelectedCitation] = useState<number | null>(null);
 
-  const { riskScore, riskDelta, synthesisText, citations, threatVectors, updatedAt } =
-    intelligenceData.situationBrief;
+  // Normalize region code for synthesis endpoint
+  const regionKey = (selectedRegion || 'Middle East').toLowerCase().replace(/\s+/g, '_');
+  const { data: liveSynthesis, isLoading: isSynthesisLoading, isError } = useSynthesisQuery(regionKey);
+
+  const fallback = intelligenceData.situationBrief;
+
+  const riskScore = liveSynthesis ? liveSynthesis.risk_score : fallback.riskScore;
+  const riskDelta = liveSynthesis ? liveSynthesis.risk_delta : fallback.riskDelta;
+  const synthesisText = liveSynthesis ? liveSynthesis.summary : fallback.synthesisText;
+  const citations = liveSynthesis ? liveSynthesis.citations : fallback.citations;
+  const threatVectors = liveSynthesis
+    ? liveSynthesis.threat_vectors.map((tv) => ({
+        id: tv.id,
+        severity: tv.severity,
+        title: tv.title,
+        detail: tv.detail,
+        citationId: tv.citationId,
+      }))
+    : fallback.threatVectors;
+
+  const updatedAt = liveSynthesis
+    ? `${Math.max(1, Math.floor((Date.now() - new Date(liveSynthesis.generated_at).getTime()) / 60000))}m ago`
+    : fallback.updatedAt;
 
   return (
     <WidgetChrome
@@ -17,11 +39,11 @@ export const SituationBriefWidget: React.FC = () => {
       subtitle="AI-synthesized executive intelligence"
       helpText="Automated executive intelligence synthesis derived from GDELT 2.0, USGS, & maritime telemetry streams."
       badgeProps={{
-        status: isLiveMode ? 'LIVE' : 'OFFLINE',
+        status: isLiveMode && !isError ? 'LIVE' : 'OFFLINE',
         sources: `${citations.length}/${citations.length}`,
         timestamp: updatedAt,
       }}
-      isLoading={isLoadingIntelligence}
+      isLoading={isLoadingIntelligence || isSynthesisLoading}
       minWidth={280}
     >
       <div className="flex flex-col h-full gap-4 text-sm">
@@ -32,18 +54,34 @@ export const SituationBriefWidget: React.FC = () => {
               <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
               AI Executive Synthesis
             </div>
+            {liveSynthesis?.model_version && (
+              <span className="text-[10px] font-mono text-brand opacity-80">
+                {liveSynthesis.model_version}
+              </span>
+            )}
             {!isLiveMode && (
               <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-status-warning-bg text-status-warning border border-status-warning-border">
-                Stale Cache
+                Offline Fallback
               </span>
             )}
           </div>
           <p className="text-sm leading-relaxed text-text-secondary">
-            {synthesisText.split(`${riskScore.toFixed(1)} (+${riskDelta.toFixed(1)})`)[0]}
-            <strong className="font-mono font-bold text-status-critical">
-              {riskScore.toFixed(1)} (+{riskDelta.toFixed(1)})
-            </strong>
-            {synthesisText.split(`${riskScore.toFixed(1)} (+${riskDelta.toFixed(1)})`)[1] || ''}
+            {synthesisText.includes(`${riskScore.toFixed(1)} (+${riskDelta.toFixed(1)})`) ? (
+              <>
+                {synthesisText.split(`${riskScore.toFixed(1)} (+${riskDelta.toFixed(1)})`)[0]}
+                <strong className="font-mono font-bold text-status-critical">
+                  {riskScore.toFixed(1)} (+{riskDelta.toFixed(1)})
+                </strong>
+                {synthesisText.split(`${riskScore.toFixed(1)} (+${riskDelta.toFixed(1)})`)[1] || ''}
+              </>
+            ) : (
+              <>
+                {synthesisText}{' '}
+                <strong className="font-mono font-bold text-status-critical ml-1">
+                  [{riskScore.toFixed(1)} (+{riskDelta.toFixed(1)})]
+                </strong>
+              </>
+            )}
           </p>
         </div>
 

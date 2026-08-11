@@ -1,18 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { WidgetChrome } from '../common/WidgetChrome';
 import { Bookmark, ArrowUpRight, ArrowDownRight, Minus, Search, Activity, Sliders } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDashboardState } from '../../store/useDashboardState';
+import { useCIIScoresQuery } from '../../lib/useApiQueries';
 import { MOCK_38_COUNTRIES_CII } from '../../data/mock/instabilityData';
 import { CountryInstabilityEntry } from '../../lib/types';
 
 export const InstabilityIndexWidget: React.FC = () => {
   const { isLiveMode, isLoadingIntelligence } = useDashboardState();
+  const { data: liveCIIData, isLoading: isCIILoading } = useCIIScoresQuery();
+
   const [bookmarked, setBookmarked] = useState<string[]>(['YEM', 'UKR', 'TWN']);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [expandedCountry, setExpandedCountry] = useState<string | null>('YEM');
 
-  const leaderboard: CountryInstabilityEntry[] = MOCK_38_COUNTRIES_CII;
+  const leaderboard: CountryInstabilityEntry[] = useMemo(() => {
+    if (isLiveMode && liveCIIData && liveCIIData.length > 0) {
+      // Map live backend CII response
+      return MOCK_38_COUNTRIES_CII.map((mockItem) => {
+        const liveScore = liveCIIData.find((s) => s.country_code === mockItem.country_code);
+        if (!liveScore) return mockItem;
+
+        return {
+          ...mockItem,
+          score: Math.round(liveScore.cii_score * 10) / 10,
+          confidence_low: Math.round(liveScore.confidence_interval_low * 10) / 10,
+          confidence_high: Math.round(liveScore.confidence_interval_high * 10) / 10,
+        };
+      }).sort((a, b) => b.score - a.score).map((item, idx) => ({ ...item, rank: idx + 1 }));
+    }
+    return MOCK_38_COUNTRIES_CII;
+  }, [isLiveMode, liveCIIData]);
 
   const filtered = leaderboard.filter(
     (item) =>

@@ -12,7 +12,7 @@ import { ForecastFeedWidget } from '../src/components/widgets/ForecastFeedWidget
 import { BriefingView } from '../src/components/views/BriefingView';
 import { useDashboardState } from '../src/store/useDashboardState';
 import { LAYER_METADATA_REGISTRY, computeActiveCentroid } from '../src/components/globe/DataLayerRegistry';
-import { RotateCcw, MapPin, Layers, Clock, Navigation, Maximize2, Target } from 'lucide-react';
+import { RotateCcw, MapPin, Layers, Clock, Navigation, Maximize2, Target, Radiation, Anchor, Ship, Plane, ShieldAlert } from 'lucide-react';
 import { clsx } from 'clsx';
 
 function DashboardViewContent() {
@@ -222,23 +222,37 @@ function DashboardViewContent() {
               {layers.length > 0 && (
                 <>
                   <span className="text-white/20">|</span>
-                  <div className="flex items-center gap-2 flex-wrap max-w-lg">
-                    {layers.slice(0, 4).map((layerId) => {
+                  <div className="flex items-center gap-2.5 flex-wrap max-w-xl">
+                    {layers.slice(0, 5).map((layerId) => {
                       const meta = LAYER_METADATA_REGISTRY[layerId];
                       if (!meta) return null;
+                      
+                      const POI_ICONS: Record<string, React.FC<{ className?: string; style?: React.CSSProperties }>> = {
+                        nuclearPlants: Radiation,
+                        seaports: Anchor,
+                        navalAssets: Ship,
+                        airAssets: Plane,
+                        alertZones: ShieldAlert,
+                      };
+                      const PoiIcon = POI_ICONS[layerId];
+
                       return (
-                        <span key={layerId} className="inline-flex items-center gap-1 text-[11px] font-mono text-text-secondary">
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ backgroundColor: meta.color, boxShadow: `0 0 6px ${meta.color}80` }}
-                          />
+                        <span key={layerId} className="inline-flex items-center gap-1.5 text-[11px] font-mono text-text-secondary">
+                          {PoiIcon ? (
+                            <PoiIcon className="w-3.5 h-3.5 shrink-0" style={{ color: meta.color }} />
+                          ) : (
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: meta.color, boxShadow: `0 0 6px ${meta.color}80` }}
+                            />
+                          )}
                           <span className="whitespace-nowrap">{meta.shortName || meta.name}</span>
                         </span>
                       );
                     })}
-                    {layers.length > 4 && (
+                    {layers.length > 5 && (
                       <span className="text-[10px] text-text-muted font-mono">
-                        +{layers.length - 4} more
+                        +{layers.length - 5} more
                       </span>
                     )}
                   </div>

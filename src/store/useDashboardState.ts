@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { IntelligenceData, MOCK_INTELLIGENCE_DATA } from '../data/mockIntelligence';
+import { api } from '../lib/api';
 
 export type ViewMode = 'global' | 'regional' | 'country';
 export type TimeRange = '24h' | '7d' | '30d';
@@ -21,6 +22,11 @@ export const ALL_LAYERS = [
   'chokepoints',
   'indiaTradeRoutes',
   'protests',
+  'nuclearPlants',
+  'seaports',
+  'navalAssets',
+  'airAssets',
+  'alertZones',
 ] as const;
 
 export type LayerId = typeof ALL_LAYERS[number];
@@ -93,7 +99,7 @@ export const useDashboardState = create<DashboardState>((set, get) => ({
   zoom: 2.69,
   view: 'global',
   timeRange: '7d',
-  layers: [...ALL_LAYERS],
+  layers: ['nuclearPlants', 'seaports', 'tradeRoutes', 'chokepoints', 'conflicts'],
   selectedRegion: 'Global',
 
   activeTab: 'globe',
@@ -103,14 +109,14 @@ export const useDashboardState = create<DashboardState>((set, get) => ({
     { id: 'tab-3', name: 'Deep Analytics', type: 'briefing-analytics' },
   ],
   isPromoBannerDismissed: false,
-  autoRotate: false,
+  autoRotate: true,
   selectedEntity: null,
 
   selectedCountryA: 'YEM',
   selectedCountryB: 'SAU',
   cascadeSourceCountry: 'YEM',
 
-  isLiveMode: true,
+  isLiveMode: false,
   isLoadingIntelligence: false,
   intelligenceError: null,
   intelligenceData: MOCK_INTELLIGENCE_DATA,
@@ -159,18 +165,75 @@ export const useDashboardState = create<DashboardState>((set, get) => ({
 
   setIsLiveMode: (isLiveMode) => set({ isLiveMode }),
   fetchIntelligenceData: async () => {
+    const { isLiveMode } = get();
     set({ isLoadingIntelligence: true, intelligenceError: null });
-    try {
-      // Simulate network request latency (e.g. 500ms)
-      await new Promise((resolve) => setTimeout(resolve, 500));
+
+    if (!isLiveMode) {
       set({
         intelligenceData: MOCK_INTELLIGENCE_DATA,
         isLoadingIntelligence: false,
       });
-    } catch (err) {
+      return;
+    }
+
+    try {
+      // Parallel request to live endpoints
+      const [ciiScores, liveFeed] = await Promise.allSettled([
+        api.getCIILatest(),
+        api.getLiveFeed('middle_east'),
+      ]);
+
+      const updatedData = { ...MOCK_INTELLIGENCE_DATA };
+
+      // Map live CII scores to instability leaderboard if available
+      if (ciiScores.status === 'fulfilled' && ciiScores.value && ciiScores.value.length > 0) {
+        const countryCodeMap: Record<string, string> = {
+          YEM: 'Yemen', UKR: 'Ukraine', SDN: 'Sudan', TWN: 'Taiwan', IRN: 'Iran', SYR: 'Syria',
+          ISR: 'Israel', RUS: 'Russia', CHN: 'China', USA: 'United States', PRK: 'North Korea',
+        };
+        const countryFlagMap: Record<string, string> = {
+          YEM: '🇾🇪', UKR: '🇺🇦', SDN: '🇸🇩', TWN: '🇹🇼', IRN: '🇮🇷', SYR: '🇸🇾',
+          ISR: '🇮🇱', RUS: '🇷🇺', CHN: '🇨🇳', USA: '🇺🇸', PRK: '🇰🇵',
+        };
+
+        updatedData.instabilityLeaderboard = ciiScores.value.slice(0, 10).map((score, index) => ({
+          rank: index + 1,
+          code: score.country_code,
+          flag: countryFlagMap[score.country_code] || '🌐',
+          name: countryCodeMap[score.country_code] || score.country_code,
+          score: Math.round(score.cii_score * 10) / 10,
+          trend: score.cii_score > 75 ? 'up' : 'stable',
+          u: String(Math.round(score.confidence_interval_high)),
+          c: String(Math.round(score.cii_score)),
+          s: String(Math.round(score.confidence_interval_low)),
+          f: String(Math.round(score.cii_score * 0.9)),
+        }));
+      }
+
+      // Map live feed items to signals if available
+      if (liveFeed.status === 'fulfilled' && liveFeed.value && liveFeed.value.items?.length > 0) {
+        updatedData.signals = liveFeed.value.items.slice(0, 8).map((item, idx) => ({
+          id: `live-${item.global_event_id || idx}`,
+          source: 'GDELT 2.0 Live',
+          category: 'KINETIC' as const,
+          status: item.event_severity <= -2 ? 'High Severity' : 'Monitored',
+          headline: item.article_text
+            ? item.article_text.slice(0, 120) + '...'
+            : `Event code ${item.event_code || 'GDELT'} reported between ${item.actor1_code || 'Actor1'} and ${item.actor2_code || 'Actor2'}`,
+          time: item.event_date ? `${item.event_date}` : 'Recently',
+        }));
+      }
+
       set({
-        intelligenceError: 'Failed to fetch intelligence telemetry',
+        intelligenceData: updatedData,
         isLoadingIntelligence: false,
+      });
+    } catch (err) {
+      console.warn('Backend API connection offline — using cached fallback intelligence', err);
+      set({
+        intelligenceData: MOCK_INTELLIGENCE_DATA,
+        isLoadingIntelligence: false,
+        intelligenceError: 'Backend API offline — running on fallback telemetry',
       });
     }
   },
